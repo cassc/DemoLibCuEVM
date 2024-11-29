@@ -289,10 +289,10 @@ def test_state_change():
     # for debugging, altering the state 2
     my_lib.instances[1]["pre"]["0xcccccccccccccccccccccccccccccccccccccccc"]["storage"][
         "0x00"
-    ] = "0x22"
-    # my_lib.instances[1]["pre"]["0xcccccccccccccccccccccccccccccccccccccccc"][
-    #     "balance"
-    # ] = "0x00"
+    ] = "0x30"
+    my_lib.instances[0]["pre"]["0xcccccccccccccccccccccccccccccccccccccccc"]["storage"][
+        "0x00"
+    ] = "0x10"    
     # my_lib.instances[2]["pre"]["0xcccccccccccccccccccccccccccccccccccccccc"]["storage"][
     #     "0x00"
     # ] = "0x33"
@@ -303,12 +303,8 @@ def test_state_change():
     print("\n\n Updated instance data \n\n")
     my_lib.print_instance_data()
 
-    trace_res = my_lib.run_transactions([tx_1, tx_1])
+    trace_res = my_lib.run_transactions([tx_1, tx_2])
 
-    # trace_res = my_lib.run_transactions([tx_2, tx_1, tx_2])
-    # # trace_res = my_lib.run_transactions([tx_1, tx_1])
-    # print("\n\n trace res \n\n")
-    # pprint(trace_res)
     # print("\n\n Updated instance data \n\n")
     my_lib.print_instance_data()
 
@@ -467,4 +463,5 @@ if __name__ == "__main__":
 
     # test_system_operation()
     # test_cross_contract()
-    test_bugs_simple()
+    # test_bugs_simple()
+    test_state_change()
