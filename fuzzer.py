@@ -144,7 +144,7 @@ class Fuzzer:
         except:
             self.branch_source_mapping[branch_id] = "NA"
         return False
-        
+
     def process_tx_trace(self, tx_trace):
         # print (self.raw_inputs)
         # class EVMBranch:
@@ -171,7 +171,7 @@ class Fuzzer:
                         self.population[missed_branch] = Seed(self.raw_inputs[idx].get("function"), self.raw_inputs[idx].get("inputs"), branch.distance)
                 else:
                     self.population[missed_branch] = Seed(self.raw_inputs[idx].get("function"), self.raw_inputs[idx].get("inputs"), branch.distance)
-                
+
             # for branch in trace.get("missed_branches", []):
             #     # print ("missed branch ", branch)
             #     if branch[0] not in self.covered_branches:
@@ -314,7 +314,7 @@ class Fuzzer:
 
         print ("\n\n Final Population \n\n")
         self.print_population()
-        
+
 
 
     def finalize_report(self):

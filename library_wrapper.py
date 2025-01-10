@@ -8,6 +8,7 @@ import json
 import copy
 from pprint import pprint
 import time
+import conversion as conv
 from utils import *
 
 # Add the directory containing your .so file to the Python path
@@ -16,6 +17,7 @@ sys.path.append("./binary/")
 
 import libcuevm  # Now you can import your module as usual
 
+EMPTY_CTYPE_ARRAY = (ctypes.c_uint8 * 0)()
 
 class CuEVMLib:
     def __init__(
@@ -183,16 +185,21 @@ class CuEVMLib:
         self,
         source_file,
         num_instances,
-        config=None,
+        config,
         contract_name=None,
         detect_bug=False,
         contract_bin_runtime=None,
     ):
-        default_config = json.loads(open("configurations/default.json").read())
+        # todo update this to load the PreState
+        # and merge the default one with the user provided one
+        with open("configurations/default.json") as f:
+            default_config_json = json.load(f)
+            target_address = default_config_json["target_address"]
         # print(default_config)
         self.detect_bug = detect_bug
         # tx_sequence_list
-        tx_sequence_config = json.loads(open(config).read())
+        with open(config) as f:
+            tx_sequence_config = json.load(f)
         if contract_name is None:
             self.contract_name = tx_sequence_config.get("contract_name")
         else:
@@ -208,28 +215,35 @@ class CuEVMLib:
             contract_bin_runtime = self.contract_instance.get("binary_runtime")
         # the merged config fields : "env", "pre" (populated with code), "transaction" (populated with tx data and value)
         pre_env = tx_sequence_config.get("pre", {})
+        default_config_json["pre"].update(pre_env) # todo
 
-        new_test = {}
-        new_test["env"] = default_config["env"].copy()
-        new_test["pre"] = default_config["pre"].copy()
+        new_test = conv.load_prestate_from_json(default_config_json)
 
 
-        new_test["pre"].update(pre_env)
+        target_code = conv.hex_to_bytes(contract_bin_runtime)
+        target_code_size = len(target_code)
+        target_storage_bytes = b""
+        target_storage_size = 0
 
-        target_address = default_config["target_address"]
+        for key, value in tx_sequence_config.get("storage", {}).items():
+            target_storage_bytes += bytes(conv.hex_to_evm_word_bytes(key))
+            target_storage_bytes += bytes(conv.hex_to_evm_word_bytes(value))
+            target_storage_size += 1
+        target_storage_bytes = (ctypes.c_uint8 * len(target_storage_bytes))(*target_storage_bytes) if target_storage_size > 0 else EMPTY_CTYPE_ARRAY
 
-        new_test["pre"][target_address]["code"] = contract_bin_runtime
+        target_pre_account_updated = False
+        for i in range(new_test.preAccountsSize):
+            account = new_test.preAccounts[i]
+            if bytes(account.address) == bytes(conv.hex_to_evm_word_bytes(target_address, padLeft=False)):
+                account.code = target_code
+                account.codeSize = target_code_size
+                account.storage = target_storage_bytes
+                account.storageSize = target_storage_size
+                target_pre_account_updated = True
+        if not target_pre_account_updated:
+            raise ValueError("target account not in the pre state of tx_sequence_config")
 
-        new_test["pre"][target_address]["storage"] = tx_sequence_config.get(
-            "storage", {}
-        )
-
-        new_test["transaction"] = default_config["transaction"].copy()
-
-        new_test["transaction"]["to"] = target_address
-        new_test["transaction"]["data"] = ["0x00"]
-        new_test["transaction"]["value"] = [0]
-        new_test["transaction"]["nonce"] = "0x00"
+        new_test.transaction.to = conv.hex_to_evm_word_bytes(target_address, padLeft=False)
 
         self.instances = [copy.deepcopy(new_test) for _ in range(num_instances)]
 
@@ -247,10 +261,12 @@ class CuEVMLib:
             tx_data = tx_data[: len(self.instances)]
         # print (f"tx_data_rebuilt {tx_data}")
         for i in range(len(tx_data)):
+            # todo update all callers of self.instances as it's no longer a dict
             self.instances[i]["transaction"]["data"] = tx_data[i]["data"]
             self.instances[i]["transaction"]["value"] = tx_data[i]["value"]
             if tx_data[i].get("sender"):
                 self.instances[i]["transaction"]["sender"] = tx_data[i]["sender"]
+            # todo_cl update here
 
             # TODO: add other fuzz-able fields
 
@@ -292,7 +308,7 @@ def test_state_change():
     ] = "0x30"
     my_lib.instances[0]["pre"]["0xcccccccccccccccccccccccccccccccccccccccc"]["storage"][
         "0x00"
-    ] = "0x10"    
+    ] = "0x10"
     # my_lib.instances[2]["pre"]["0xcccccccccccccccccccccccccccccccccccccccc"]["storage"][
     #     "0x00"
     # ] = "0x33"
