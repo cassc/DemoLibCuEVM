@@ -154,6 +154,8 @@ def load_prestate_from_json(config):
         previousHash=hex_to_evm_word_bytes(config["env"]["previousHash"])
     )
 
+    # print("py gas limit", bytes(hex_to_evm_word_bytes(config["env"]["currentGasLimit"])))
+
     accounts = []
     for address, account in config["pre"].items():
         code=hex_to_bytes(account["code"])
@@ -170,7 +172,7 @@ def load_prestate_from_json(config):
         accounts.append(
             Account(
                 balance=hex_to_evm_word_bytes(account["balance"]),
-                address=hex_to_evm_word_bytes(address, padLeft=False),
+                address=hex_to_evm_word_bytes(address),
                 codeSize= code_size,
                 code=code,
                 nonce=hex_to_evm_word_bytes(account["nonce"]),
@@ -186,8 +188,8 @@ def load_prestate_from_json(config):
     value = hex_to_evm_word_bytes(config["transaction"]["value"][0])
 
     tx_data_size = len(tx_data or [])
-    sender = hex_to_evm_word_bytes(config["transaction"]["sender"], padLeft=False)
-    to = hex_to_evm_word_bytes(config["transaction"]["to"], padLeft=False)
+    sender = hex_to_evm_word_bytes(config["transaction"]["sender"])
+    to = hex_to_evm_word_bytes(config["transaction"]["to"])
     nonce = hex_to_evm_word_bytes(config["transaction"]["nonce"])
     secret_key = hex_to_evm_word_bytes(config["transaction"]["secretKey"])
 
@@ -212,3 +214,33 @@ def load_prestate_from_json(config):
     )
 
     return prestate
+
+
+def replace_pre_accounts(prestate: PreState, json_accounts: dict):
+    accounts = []
+    for address, account in json_accounts.items():
+        code=hex_to_bytes(account.get("code", "0x")) # may not exist in post state
+        code_size = len(code or [])
+
+        storage_bytes = b""
+        storage_size = 0
+        for key, value in account["storage"].items():
+            storage_bytes += bytes(hex_to_evm_word_bytes(key))
+            storage_bytes += bytes(hex_to_evm_word_bytes(value))
+            storage_size += 1
+        storage_bytes = (ctypes.c_uint8 * len(storage_bytes))(*storage_bytes) if storage_size > 0 else (ctypes.c_uint8 * 0)()
+
+        nonce = hex_to_evm_word_bytes(f'{account.get("nonce", 0):0x}') # is a number
+
+        accounts.append(
+            Account(
+                balance=hex_to_evm_word_bytes(account["balance"]),
+                address=hex_to_evm_word_bytes(address),
+                codeSize= code_size,
+                code=code,
+                nonce=nonce,
+                storage=storage_bytes,
+                storageSize=storage_size,))
+
+    prestate.preAccounts = (Account * len(accounts))(*accounts)
+    prestate.preAccountsSize = len(accounts)

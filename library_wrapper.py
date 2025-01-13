@@ -42,34 +42,27 @@ class CuEVMLib:
 
     def update_persistent_state(self, json_result):
         trace_values = json_result
-        # print ("trace value result")
-        # pprint(json_result)
+        print ("trace value result")
+        pprint(json_result)
 
         if trace_values is None or trace_values.get("post") is None:
-            print("Skipping updating state")
             return
         for i in range(len(trace_values.get("post"))):
             post_state = trace_values.get("post")[i].get("state")
-            # print("\n\n post_state %d \n\n" % i)
-            # pprint(post_state)
-            # self.instances[i]["pre"] = copy.deepcopy(post_state)
-            # Nov update: copy nonce balance storage and not code
-            for key, value in post_state.items():
-                if key in self.instances[i]["pre"]:
-                    self.instances[i]["pre"][key].update(value)
-                else:
-                    self.instances[i]["pre"][key] = value
-                    self.instances[i]["pre"][key]["code"] = "0x"
-                self.instances[i]["pre"][key]["nonce"] = hex(
-                    self.instances[i]["pre"][key]["nonce"]
-                )
+            if not post_state:
+                print("BAD STATE: No post state skipping updating state")
+                continue
+            # todo_cl maybe should not replace the state
+            conv.replace_pre_accounts(self.instances[i], post_state)
 
-                # self.instances[i]["pre"][key]["storage"] = value.get("storage")
+            sender_nonce = post_state.get(self.sender).get("nonce") # is a number, better use native bytes
+            if sender_nonce:
+                sender_nonce = conv.hex_to_evm_word_bytes(f'{sender_nonce:0x}')
+                self.instances[i].transaction.nonce = sender_nonce
+            else:
+                print(f"BAD STATE: Sender nonce not found in post state")
 
-            # sender = next_config["transaction"]["sender"]
-            self.instances[i]["transaction"]["nonce"] = hex(
-                post_state.get(self.sender).get("nonce")
-            )
+
 
     ## 1. run transactions on the EVM instances
     ## 2. update the persistent state of the EVM instances
@@ -237,7 +230,7 @@ class CuEVMLib:
         target_pre_account_updated = False
         for i in range(new_test.preAccountsSize):
             account = new_test.preAccounts[i]
-            if bytes(account.address) == bytes(conv.hex_to_evm_word_bytes(target_address, padLeft=False)):
+            if bytes(account.address) == bytes(conv.hex_to_evm_word_bytes(target_address)):
                 account.code = target_code
                 account.codeSize = target_code_size
                 account.storage = target_storage_bytes
@@ -246,7 +239,7 @@ class CuEVMLib:
         if not target_pre_account_updated:
             raise ValueError("target account not in the pre state of tx_sequence_config")
 
-        new_test.transaction.to = conv.hex_to_evm_word_bytes(target_address, padLeft=False)
+        new_test.transaction.to = conv.hex_to_evm_word_bytes(target_address)
 
         self.instances = [copy.deepcopy(new_test) for _ in range(num_instances)]
 
@@ -269,8 +262,8 @@ class CuEVMLib:
             self.instances[i].transaction.dataSize = len(bytes(self.instances[i].transaction.data))
             self.instances[i].transaction.value = conv.hex_to_evm_word_bytes(tx_data[i]["value"][0])
             if tx_data[i].get("sender"):
-                self.instances[i].transaction.sender = conv.hex_to_evm_word_bytes(tx_data[i]["sender"], padLeft=False)
-            print("sender", bytes(self.instances[i].transaction.sender))
+                self.instances[i].transaction.sender = conv.hex_to_evm_word_bytes(tx_data[i]["sender"])
+            # print("sender", bytes(self.instances[i].transaction.sender))
 
             # TODO: add other fuzz-able fields
 
