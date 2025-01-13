@@ -80,7 +80,10 @@ class CuEVMLib:
         # print ("before running")
         if measure_performance:
             time_start = time.time()
-        result_state = libcuevm.run_dict(self.instances, skip_trace_parsing)
+        instances = (conv.PreState * len(self.instances))()
+        for i in range(len(self.instances)):
+            instances[i] = self.instances[i]
+        result_state = libcuevm.run_dict(instances, skip_trace_parsing)
         if measure_performance:
             time_end = time.time()
             print(f"Time taken: {time_end - time_start} seconds")
@@ -262,11 +265,12 @@ class CuEVMLib:
         # print (f"tx_data_rebuilt {tx_data}")
         for i in range(len(tx_data)):
             # todo update all callers of self.instances as it's no longer a dict
-            self.instances[i]["transaction"]["data"] = tx_data[i]["data"]
-            self.instances[i]["transaction"]["value"] = tx_data[i]["value"]
+            self.instances[i].transaction.data = conv.hex_to_bytes(tx_data[i]["data"][0])
+            self.instances[i].transaction.dataSize = len(bytes(self.instances[i].transaction.data))
+            self.instances[i].transaction.value = conv.hex_to_evm_word_bytes(tx_data[i]["value"][0])
             if tx_data[i].get("sender"):
-                self.instances[i]["transaction"]["sender"] = tx_data[i]["sender"]
-            # todo_cl update here
+                self.instances[i].transaction.sender = conv.hex_to_evm_word_bytes(tx_data[i]["sender"], padLeft=False)
+            print("sender", bytes(self.instances[i].transaction.sender))
 
             # TODO: add other fuzz-able fields
 
