@@ -137,14 +137,14 @@ class Fuzzer:
             lines = frag.get("linenums",[0,0])
             print(f"lines: {lines}")
             if lines[1]<= lines[0]+1:
-                self.branch_source_mapping[branch_id] = frag.get('fragment')
+                self.branch_source_mapping[branch_id] = f"pc: {branch.pc_src}, lines: {lines}\n {frag.get('fragment')}"
                 return True
             else:
-                self.branch_source_mapping[branch_id] = "NA"
+                self.branch_source_mapping[branch_id] = f"pc: {branch.pc_src}, lines: {lines}"
         except:
             self.branch_source_mapping[branch_id] = "NA"
         return False
-        
+
     def process_tx_trace(self, tx_trace):
         # print (self.raw_inputs)
         # class EVMBranch:
@@ -171,7 +171,7 @@ class Fuzzer:
                         self.population[missed_branch] = Seed(self.raw_inputs[idx].get("function"), self.raw_inputs[idx].get("inputs"), branch.distance)
                 else:
                     self.population[missed_branch] = Seed(self.raw_inputs[idx].get("function"), self.raw_inputs[idx].get("inputs"), branch.distance)
-                
+
             # for branch in trace.get("missed_branches", []):
             #     # print ("missed branch ", branch)
             #     if branch[0] not in self.covered_branches:
@@ -314,7 +314,7 @@ class Fuzzer:
 
         print ("\n\n Final Population \n\n")
         self.print_population()
-        
+
 
 
     def finalize_report(self):
