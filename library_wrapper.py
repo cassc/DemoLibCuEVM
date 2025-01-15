@@ -80,6 +80,13 @@ class CuEVMLib:
         log.debug("run_transactions, num instances: %s", len(self.instances))
         for i in range(len(self.instances)):
             instances[i] = self.instances[i]
+            for j in range(instances[i].preAccountsSize):
+                account = instances[i].preAccounts[j]
+                address = hexlify(bytes(account.address)[12:]).decode()
+                codeSize = account.codeSize
+                code = hexlify(bytes(account.code[:codeSize])).decode()
+                log.debug("account code: address %s codeSize %s code %s", address, codeSize, code)
+
         result_state = libcuevm.run_dict(instances, skip_trace_parsing)
         if measure_performance:
             time_end = time.time()
@@ -236,6 +243,7 @@ class CuEVMLib:
             account = new_test.preAccounts[i]
             if bytes(account.address) == bytes(conv.hex_to_evm_word_bytes(target_address)):
                 account.code = target_code
+                log.debug("target_code %s %s", hexlify(bytes(account.code[:target_code_size])).decode(), target_code_size)
                 account.codeSize = target_code_size
                 account.storage = target_storage_bytes
                 account.storageSize = target_storage_size
@@ -271,8 +279,9 @@ class CuEVMLib:
         # print (f"tx_data_rebuilt {tx_data}")
         for i in range(len(tx_data)):
             # todo update all callers of self.instances as it's no longer a dict
-            self.instances[i].transaction.data = conv.hex_to_bytes(tx_data[i]["data"][0])
-            self.instances[i].transaction.dataSize = len(bytes(self.instances[i].transaction.data))
+            data = conv.hex_to_bytes(tx_data[i]["data"][0])
+            self.instances[i].transaction.data = data
+            self.instances[i].transaction.dataSize = len(data) # don't use cpp pointer directly, eg len(bytes(self.instances[i].transaction.data))
             self.instances[i].transaction.value = conv.hex_to_evm_word_bytes(tx_data[i]["value"][0])
             if tx_data[i].get("sender"):
                 self.instances[i].transaction.sender = conv.hex_to_evm_word_bytes(tx_data[i]["sender"])

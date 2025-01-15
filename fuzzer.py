@@ -236,7 +236,7 @@ class Fuzzer:
                 # for input_ in self.abi_list[function].get("input_types"):
                 #     inputs.append(self.fuzzer.generate_random_input(input_))
                 inputs = self.mutate([], function, generate_random=True)
-                # print(f"Function {function} : {inputs}")
+                print(f"Function {function} : {inputs}")
                 self.post_process_input(tx_data, inputs, function)
 
 

@@ -1,5 +1,6 @@
 import ctypes
 from binascii import hexlify, unhexlify
+from logger import log
 from typing import Optional
 import copy
 
@@ -233,15 +234,19 @@ def replace_pre_accounts(prestate: PreState, json_accounts: dict):
         storage_bytes = b""
         storage_size = 0
         for key, value in account["storage"].items():
+            log.debug("updating storage key %s value %s", key, value)
             storage_bytes += bytes(hex_to_evm_word_bytes(key))
             storage_bytes += bytes(hex_to_evm_word_bytes(value))
             storage_size += 1
+            log.debug("storage_bytes %s %s", storage_bytes, len(storage_bytes))
+
         storage_bytes = (ctypes.c_uint8 * len(storage_bytes))(*storage_bytes) if storage_size > 0 else (ctypes.c_uint8 * 0)()
 
         nonce = hex_to_evm_word_bytes(f'{account.get("nonce", 0):0x}') # is a number
         balance = hex_to_evm_word_bytes(account["balance"])
 
         if evmAccount:
+            log.debug("updating account %s nonce, balance, storage. New storageSize: %s", address, storage_size)
             evmAccount.nonce = nonce
             evmAccount.balance = balance
             evmAccount.storage = storage_bytes
