@@ -217,9 +217,17 @@ def load_prestate_from_json(config):
 
 
 def replace_pre_accounts(prestate: PreState, json_accounts: dict):
-    accounts = []
+    accounts = {}
+    for i in range(prestate.preAccountsSize):
+        account = prestate.preAccounts[i]
+        accounts["0x" + hexlify(bytes(account.address)[12:]).decode().upper()] =  account
+
     for address, account in json_accounts.items():
-        code=hex_to_bytes(account.get("code", "0x")) # may not exist in post state
+        # update or set nonce, balance, storage
+        evmAccount = accounts.get(address)
+
+        code = account.get("code", "")
+        code=hex_to_bytes(code)
         code_size = len(code or [])
 
         storage_bytes = b""
@@ -231,16 +239,25 @@ def replace_pre_accounts(prestate: PreState, json_accounts: dict):
         storage_bytes = (ctypes.c_uint8 * len(storage_bytes))(*storage_bytes) if storage_size > 0 else (ctypes.c_uint8 * 0)()
 
         nonce = hex_to_evm_word_bytes(f'{account.get("nonce", 0):0x}') # is a number
+        balance = hex_to_evm_word_bytes(account["balance"])
 
-        accounts.append(
-            Account(
+        if evmAccount:
+            evmAccount.nonce = nonce
+            evmAccount.balance = balance
+            evmAccount.storage = storage_bytes
+            evmAccount.storageSize = storage_size
+            # code does not exist in the post state, so we don't override it
+        else:
+            accounts[address] = Account(
                 balance=hex_to_evm_word_bytes(account["balance"]),
                 address=hex_to_evm_word_bytes(address),
                 codeSize= code_size,
                 code=code,
                 nonce=nonce,
                 storage=storage_bytes,
-                storageSize=storage_size,))
+                storageSize=storage_size,)
 
+
+    accounts = list(accounts.values())
     prestate.preAccounts = (Account * len(accounts))(*accounts)
     prestate.preAccountsSize = len(accounts)

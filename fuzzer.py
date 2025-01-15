@@ -146,7 +146,7 @@ class Fuzzer:
         return False
 
     def process_tx_trace(self, tx_trace):
-        # print (self.raw_inputs)
+        # print (tx_trace)
         # class EVMBranch:
         #     pc_src: int
         #     pc_dst: int

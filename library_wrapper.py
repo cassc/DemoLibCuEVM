@@ -2,6 +2,7 @@
 library wrapper to maintain state of EVM instances and run tx on them
 """
 
+from binascii import hexlify
 import sys
 import ctypes
 import json
@@ -9,6 +10,7 @@ import copy
 from pprint import pprint
 import time
 import conversion as conv
+from logger import log
 from utils import *
 
 # Add the directory containing your .so file to the Python path
@@ -42,8 +44,8 @@ class CuEVMLib:
 
     def update_persistent_state(self, json_result):
         trace_values = json_result
-        print ("trace value result")
-        pprint(json_result)
+        log.debug("trace value result")
+        log.debug(json_result)
 
         if trace_values is None or trace_values.get("post") is None:
             return
@@ -68,6 +70,8 @@ class CuEVMLib:
     ## 2. update the persistent state of the EVM instances
     ## 3. return the simplified trace during execution
     def run_transactions(self, tx_data, skip_trace_parsing=False, measure_performance=False):
+        # print("run_transactions")
+        # pprint(tx_data)
         self.build_instance_data(tx_data)
         # self.print_instance_data()
         # print ("before running")
@@ -246,7 +250,15 @@ class CuEVMLib:
     def print_instance_data(self):
         for idx, instance in enumerate(self.instances):
             print(f"\n\n Instance data {idx}\n\n")
-            pprint(instance)
+            size = instance.preAccountsSize
+            for i in range(size):
+                account = instance.preAccounts[i]
+                address = "0x" + hexlify(bytes(account.address)[12:]).decode().upper()
+                code = "0x" + hexlify(bytes(account.code[:account.codeSize])).decode().upper()
+                print("address", address)
+                print("code", code)
+                print("codeSize", account.codeSize)
+
 
     ## build instances data from new tx data
     ## tx_data is a list of tx data
@@ -263,6 +275,7 @@ class CuEVMLib:
             self.instances[i].transaction.value = conv.hex_to_evm_word_bytes(tx_data[i]["value"][0])
             if tx_data[i].get("sender"):
                 self.instances[i].transaction.sender = conv.hex_to_evm_word_bytes(tx_data[i]["sender"])
+            # print("using txdta", bytes(self.instances[i].transaction.data).hex())
             # print("sender", bytes(self.instances[i].transaction.sender))
 
             # TODO: add other fuzz-able fields
