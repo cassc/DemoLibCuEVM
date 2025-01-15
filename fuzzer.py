@@ -9,6 +9,8 @@ import copy
 from collections import deque
 from utils import *
 import os
+from logger import log
+
 BRANCH_POPULATION = 3
 
 SMALL_DELTA = 16
@@ -146,7 +148,7 @@ class Fuzzer:
         return False
 
     def process_tx_trace(self, tx_trace):
-        # print (tx_trace)
+        log.debug("tx_trace %s", tx_trace)
         # class EVMBranch:
         #     pc_src: int
         #     pc_dst: int
