@@ -140,7 +140,7 @@ class Fuzzer:
                 self.branch_source_mapping[branch_id] = frag.get('fragment')
                 return True
             else:
-                self.branch_source_mapping[branch_id] = "NA"
+                self.branch_source_mapping[branch_id] = f"pc: {branch.pc_src} lines: {lines}"
         except:
             self.branch_source_mapping[branch_id] = "NA"
         return False
