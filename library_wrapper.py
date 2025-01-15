@@ -48,8 +48,8 @@ class CuEVMLib:
             return
         for i in range(len(trace_values.get("post"))):
             post_state = trace_values.get("post")[i].get("state")
-            # print("\n\n post_state %d \n\n" % i)
-            # pprint(post_state)
+            print("\n\n post_state %d \n\n" % i)
+            pprint(trace_values)
             # self.instances[i]["pre"] = copy.deepcopy(post_state)
             # Nov update: copy nonce balance storage and not code
             for key, value in post_state.items():
@@ -292,7 +292,7 @@ def test_state_change():
     ] = "0x30"
     my_lib.instances[0]["pre"]["0xcccccccccccccccccccccccccccccccccccccccc"]["storage"][
         "0x00"
-    ] = "0x10"    
+    ] = "0x10"
     # my_lib.instances[2]["pre"]["0xcccccccccccccccccccccccccccccccccccccccc"]["storage"][
     #     "0x00"
     # ] = "0x33"
