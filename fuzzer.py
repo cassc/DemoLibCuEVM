@@ -236,7 +236,7 @@ class Fuzzer:
                 # for input_ in self.abi_list[function].get("input_types"):
                 #     inputs.append(self.fuzzer.generate_random_input(input_))
                 inputs = self.mutate([], function, generate_random=True)
-                print(f"Function {function} : {inputs}")
+                log.debug(f"Function {function} : {inputs}")
                 self.post_process_input(tx_data, inputs, function)
 
 
@@ -305,7 +305,7 @@ class Fuzzer:
                 input, function = self.select_next_input()
                 new_input = self.mutate(input, function)
                 if DEBUG[0] == "v":
-                    print(f"Function {function} : {new_input}")
+                    log.debug(f"Function {function} : {new_input}")
                 self.post_process_input(tx_data, new_input, function)
 
             tx_trace = self.library.run_transactions(tx_data)
