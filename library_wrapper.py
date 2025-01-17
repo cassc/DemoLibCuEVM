@@ -44,7 +44,7 @@ class CuEVMLib:
 
     def update_persistent_state(self, json_result):
         trace_values = json_result
-        log.debug("trace value result %s", pformat(trace_values))
+        log.debug("trace value result %s", trace_values, extra={"format": pformat})
 
         if trace_values is None or trace_values.get("post") is None:
             return
@@ -271,7 +271,7 @@ class CuEVMLib:
     ## build instances data from new tx data
     ## tx_data is a list of tx data
     def build_instance_data(self, tx_data):
-        log.debug("tx_data %s", pformat(tx_data))
+        log.debug("tx_data %s", tx_data, extra={'format': pformat})
         if len(tx_data) < len(self.instances):
             tx_data = tx_data + [tx_data[-1]] * (len(self.instances) - len(tx_data))
         if len(tx_data) > len(self.instances):
