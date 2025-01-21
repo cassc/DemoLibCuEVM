@@ -58,8 +58,6 @@ class EVMWordStruct(ctypes.Structure):
         memo[id(self)] = copied_instance
         return copied_instance
 
-
-
 # Define the Env struct
 class Env(EVMWordStruct):
     _fields_ = [
@@ -136,8 +134,6 @@ class PreState(ctypes.Structure):
         # Store the copied instance in memo
         memo[id(self)] = copied_instance
         return copied_instance
-
-
 
 def load_prestate_from_json(config):
     """Create a PreState object from a pre state JSON, assuming the JSON has been

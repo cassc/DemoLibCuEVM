@@ -9,7 +9,8 @@ import json
 import copy
 from pprint import pformat, pprint
 import time
-import conversion as conv
+import pre_state_conversion as conv
+from post_state_conversion import PostState
 from logger import log
 from utils import *
 
@@ -76,9 +77,10 @@ class CuEVMLib:
         # print ("before running")
         if measure_performance:
             time_start = time.time()
-        instances = (conv.PreState * len(self.instances))()
-        log.debug("run_transactions, num instances: %s", len(self.instances))
-        for i in range(len(self.instances)):
+        num_instances = len(self.instances)
+        instances = (conv.PreState * num_instances)()
+        log.debug("run_transactions, num instances: %s", num_instances)
+        for i in range(num_instances):
             instances[i] = self.instances[i]
             for j in range(instances[i].preAccountsSize):
                 account = instances[i].preAccounts[j]
@@ -87,7 +89,12 @@ class CuEVMLib:
                 code = hexlify(bytes(account.code[:codeSize])).decode()
                 log.debug("account code: address %s codeSize %s code %s", address, codeSize, code)
 
-        result_state = libcuevm.run_dict(instances, skip_trace_parsing)
+        p_result = libcuevm.run_dict(instances, skip_trace_parsing)
+        results = ctypes.cast(p_result, ctypes.POINTER(PostState * num_instances)).contents
+
+        for i in range(num_instances):
+            print(f"Instance: {i} result number of accounts:  {results[i].postAccountsSize}")
+
         if measure_performance:
             time_end = time.time()
             print(f"Time taken: {time_end - time_start} seconds")
