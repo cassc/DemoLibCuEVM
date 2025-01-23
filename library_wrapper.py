@@ -10,7 +10,9 @@ import copy
 from pprint import pformat, pprint
 import time
 import pre_state_conversion as conv
-from post_state_conversion import PostState
+from pre_state_conversion import Account, PreState
+from post_state_conversion import PostState, PostStates, PostAccount
+from conversion import to_ctype_byte_array
 from logger import log
 from utils import *
 
@@ -21,6 +23,55 @@ sys.path.append("./binary/")
 import libcuevm  # Now you can import your module as usual
 
 EMPTY_CTYPE_ARRAY = (ctypes.c_uint8 * 0)()
+
+def update_pre_accounts(preState: PreState, postState: PostState, sender: bytes):
+    accounts = {}
+    print("sender ", sender)
+    senderNonce = None
+    for i in range(preState.preAccountsSize):
+        account = preState.preAccounts[i]
+        accounts[bytes(account.address)] =  account
+
+    if postState.postAccountsSize > 0:
+        postAccounts = ctypes.cast(postState.postAccounts, ctypes.POINTER(PostAccount * postState.postAccountsSize)).contents
+
+        for i in range(postState.postAccountsSize):
+            postAccount = postAccounts[i]
+            address = bytes(postAccount.address)
+            oldAccount = accounts.get(address)
+            storageSize = postAccount.storageSize
+            if sender == address:
+                senderNonce = to_ctype_byte_array(bytes(postAccount.nonce))
+
+            if oldAccount:
+                log.debug("updating account %s nonce, balance, storage. storageSize: %s -> %s", address, oldAccount.storageSize, storageSize)
+                log.debug("Updating nonce from %s to %s", bytes(oldAccount.nonce).hex(), bytes(postAccount.nonce).hex())
+                ctypes.memmove(oldAccount.nonce, postAccount.nonce, ctypes.sizeof(postAccount.nonce))
+                log.debug("Updating balance from %s to %s", bytes(oldAccount.balance).hex(), bytes(postAccount.balance).hex())
+                ctypes.memmove(oldAccount.balance, postAccount.balance, ctypes.sizeof(postAccount.balance))
+                log.debug("Updating storage size from %s to %s", oldAccount.storageSize, storageSize)
+                oldAccount.storageSize = storageSize
+
+                if storageSize > 0:
+                    ctypes.memmove(oldAccount.storage, postAccount.storage, ctypes.sizeof(postAccount.storage))
+                # code does not exist in the post state, so we don't override it
+            else:
+                account = Account()
+                log.debug("creating new account %s with storageSize: %s", bytes(address)[12:].hex(), storageSize)
+                ctypes.memmove(account.nonce, postAccount.nonce, ctypes.sizeof(postAccount.nonce))
+                ctypes.memmove(account.balance, postAccount.balance, ctypes.sizeof(postAccount.balance))
+                ctypes.memmove(account.address, postAccount.address, ctypes.sizeof(postAccount.address))
+                if storageSize > 0:
+                    ctypes.memmove(account.storage, postAccount.storage, ctypes.sizeof(postAccount.storage))
+                account.storageSize = storageSize
+                account.codeSize = 0
+                accounts[address] = account
+
+    accounts = list(accounts.values())
+    preState.preAccounts = (Account * len(accounts))(*accounts)
+    preState.preAccountsSize = len(accounts)
+    return senderNonce
+
 
 class CuEVMLib:
     def __init__(
@@ -43,23 +94,18 @@ class CuEVMLib:
         )
         self.sender = sender
 
-    def update_persistent_state(self, json_result):
-        trace_values = json_result
-        log.debug("trace value result %s", trace_values, extra={"format": pformat})
-
-        if trace_values is None or trace_values.get("post") is None:
+    def update_persistent_state(self, post):
+        size = post.postStatesSize
+        if size == 0:
             return
-        for i in range(len(trace_values.get("post"))):
-            post_state = trace_values.get("post")[i].get("state")
-            if not post_state:
-                print("BAD STATE: No post state skipping updating state")
-                continue
-            # todo_cl maybe should not replace the state
-            conv.replace_pre_accounts(self.instances[i], post_state)
+        states = post.postStates
 
-            sender_nonce = post_state.get(self.sender).get("nonce") # is a number, better use native bytes
-            if sender_nonce:
-                sender_nonce = conv.hex_to_evm_word_bytes(f'{sender_nonce:0x}')
+        sender = bytes(conv.hex_to_evm_word_bytes(self.sender))
+        for i in range(size):
+            post_state = states[i]
+            sender_nonce = update_pre_accounts(self.instances[i], post_state, sender)
+
+            if sender_nonce is not None:
                 self.instances[i].transaction.nonce = sender_nonce
             else:
                 print(f"BAD STATE: Sender nonce not found in post state")
@@ -89,61 +135,80 @@ class CuEVMLib:
                 code = hexlify(bytes(account.code[:codeSize])).decode()
                 log.debug("account code: address %s codeSize %s code %s", address, codeSize, code)
 
-        p_result = libcuevm.run_dict(instances, skip_trace_parsing)
-        results = ctypes.cast(p_result, ctypes.POINTER(PostState * num_instances)).contents
+        mem_view = libcuevm.run_dict(instances, skip_trace_parsing)
+        p_results = PostStates.from_buffer_copy(mem_view)
 
         for i in range(num_instances):
-            print(f"Instance: {i} result number of accounts:  {results[i].postAccountsSize}")
+            log.debug(f"Instance: {i} result number of accounts:  {p_results.postStates[i].postAccountsSize}")
+            for j in range(p_results.postStates[i].postAccountsSize):
+                account = p_results.postStates[i].postAccounts[j]
+                address = hexlify(bytes(account.address)[12:]).decode()
+                log.debug("account code: address %s", address)
 
         if measure_performance:
             time_end = time.time()
             print(f"Time taken: {time_end - time_start} seconds")
-        self.update_persistent_state(result_state)
-        return self.post_process_trace(result_state)
+        self.update_persistent_state(p_results)
+        r = self.post_process_trace(p_results)
+
+        # todo: need to free post_states
+
+        return r
 
     # post process the trace to detect integer bugs and simplify the distance
-    def post_process_trace(self, json_result):
-        if json_result is None or json_result.get("post") is None:
+    def post_process_trace(self, post):
+        size = post.postStatesSize
+        if size < 1:
             print("Skipping post processing")
             return []
         final_trace = []
-        # print("\ntrace\n")
-        # pprint(trace)
-        for i in range(len(json_result.get("post"))):
-            tx_trace = json_result.get("post")[i].get("trace")
-            # print("tx trace")
-            # pprint(tx_trace)
+
+
+        for i in range(size):
+            tx_trace = post.postStates[i].trace
             branches = []
             events = []
             storage_write = []
             bugs = []
-            for branch in tx_trace.get("branches", [])[3:]:
+
+            # todo_cl fix this
+            print(ctypes.alignment(PostStates)) # => 8
+            print(ctypes.sizeof(PostStates))  # => 16
+
+            log.debug("post_process_trace branchesSize %s eventsSize %s callsSize %s", tx_trace.branchesSize, tx_trace.eventsSize, tx_trace.callsSize)
+
+
+
+            for i in range(tx_trace.branchesSize):
+
+                branch = tx_trace.branches[i]
                 branches.append(
                     EVMBranch(
-                        pc_src=branch.get("pc_src"),
-                        pc_dst=branch.get("pc_dst"),
-                        pc_missed=branch.get("pc_missed"),
-                        distance=int(branch.get("distance"), 16),
+                        pc_src=branch.pcSrc,
+                        pc_dst=branch.pcDst,
+                        pc_missed=branch.pcMissed,
+                        distance=branch.distance, # todo_cl may need to convert to number
                     )
                 )
 
-            for event in tx_trace.get("events", []):
-                if event.get("opcode") == OP_SSTORE:
+            for i in range(tx_trace.eventsSize):
+                event = tx_trace.events[i]
+                if event.op == OP_SSTORE:
                     storage_write.append(
                         EVMStorageWrite(
-                            pc=event.get("pc"),
-                            key=event.get("operand_1"),
-                            value=event.get("operand_2"),
+                            pc=event.pc,
+                            key=event.stack[0:32], # todo_cl may need conversion
+                            value=event.stack[32:64],
                         )
                     )
                 else:
                     events.append(
                         TraceEvent(
-                            pc=event.get("pc"),
-                            opcode=event.get("op"),
-                            operand_1=int(event.get("operand_1"), 16),
-                            operand_2=int(event.get("operand_2"), 16),
-                            result=int(event.get("res"), 16),
+                            pc=event.pc,
+                            opcode=event.op,
+                            operand_1=event.stack[0:32], # todo_cl convert to number
+                            operand_2=event.stack[32:64],
+                            result=event.res, # convert to number
                         )
                     )
                     if self.detect_bug:
@@ -160,15 +225,16 @@ class CuEVMLib:
                             bugs.append(EVMBug(current_event.pc, current_event.opcode, "selfdestruct"))
 
             all_call = []
-            for call in tx_trace.get("calls", []):
+            for i in range(tx_trace.callsSize):
+                call = tx_trace.calls[i]
                 all_call.append(
                     EVMCall(
-                        pc=call.get("pc"),
-                        opcode=call.get("op"),
-                        _from=call.get("sender"),
-                        _to=call.get("receiver"),
-                        value=int(call.get("value"), 16),
-                        result=call.get("success")
+                        pc=call.pc,
+                        opcode=call.op,
+                        _from=call.sender,
+                        _to=call.receiver,
+                        value=call.value, # todo_cl to number
+                        result=call.success
                     )
                 )
                 if self.detect_bug:

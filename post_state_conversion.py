@@ -8,7 +8,6 @@ class Event(ctypes.Structure):
         ("pc", ctypes.c_uint32),
         ("op", ctypes.c_uint8)
     ]
-    _align_ = 16
 
 class Branch(ctypes.Structure):
     _fields_ = [
@@ -17,7 +16,7 @@ class Branch(ctypes.Structure):
         ("pcMissed", ctypes.c_uint32),
         ("distance", ctypes.c_uint8 * 32)
     ]
-    _align_ = 16
+
 
 class Call(ctypes.Structure):
     _fields_ = [
@@ -28,9 +27,8 @@ class Call(ctypes.Structure):
         ("op", ctypes.c_uint8),
         ("success", ctypes.c_bool)
     ]
-    _align_ = 16
 
-class Account(ctypes.Structure):
+class PostAccount(ctypes.Structure):
     _fields_ = [
         ("balance", ctypes.c_uint8 * 32),
         ("address", ctypes.c_uint8 * 32),
@@ -38,7 +36,7 @@ class Account(ctypes.Structure):
         ("storage", ctypes.POINTER(ctypes.c_uint8)),  # pointer to uint8_t storage
         ("storageSize", ctypes.c_uint32)  # number of 64-byte entries
     ]
-    _align_ = 16
+
 
 class Trace(ctypes.Structure):
     _fields_ = [
@@ -49,12 +47,16 @@ class Trace(ctypes.Structure):
         ("calls", ctypes.POINTER(Call)),
         ("callsSize", ctypes.c_uint32)
     ]
-    _align_ = 16
 
 class PostState(ctypes.Structure):
     _fields_ = [
-        ("postAccounts", ctypes.POINTER(Account)),
+        ("postAccounts", ctypes.POINTER(PostAccount)),
         ("postAccountsSize", ctypes.c_uint32),
         ("trace", Trace)
     ]
-    _align_ = 16
+
+class PostStates(ctypes.Structure):
+    _fields_ = [
+        ("postStates", ctypes.POINTER(PostState)),
+        ("postStatesSize", ctypes.c_uint32)
+    ]
