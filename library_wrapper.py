@@ -2,6 +2,7 @@
 library wrapper to maintain state of EVM instances and run tx on them
 """
 
+import logging
 from binascii import hexlify
 import sys
 import ctypes
@@ -11,7 +12,7 @@ from pprint import pformat, pprint
 import time
 import pre_state_conversion as conv
 from pre_state_conversion import Account, PreState
-from post_state_conversion import PostState, PostStates, PostAccount
+from post_state_conversion import PostState, PostStates, PostAccount, Event
 from conversion import to_ctype_byte_array
 from logger import log
 from utils import *
@@ -26,7 +27,6 @@ EMPTY_CTYPE_ARRAY = (ctypes.c_uint8 * 0)()
 
 def update_pre_accounts(preState: PreState, postState: PostState, sender: bytes):
     accounts = {}
-    print("sender ", sender)
     senderNonce = None
     for i in range(preState.preAccountsSize):
         account = preState.preAccounts[i]
@@ -52,8 +52,10 @@ def update_pre_accounts(preState: PreState, postState: PostState, sender: bytes)
                 log.debug("Updating storage size from %s to %s", oldAccount.storageSize, storageSize)
                 oldAccount.storageSize = storageSize
 
-                if storageSize > 0:
-                    ctypes.memmove(oldAccount.storage, postAccount.storage, ctypes.sizeof(postAccount.storage))
+                oldAccount.storage = postAccount.storage  # Just copy the pointer
+                oldAccount.storageSize = postAccount.storageSize  # Update size metadata
+                if storageSize > 0 and log.isEnabledFor(logging.DEBUG):
+                    log.debug(f"Storage updated from {ctypes.string_at(oldAccount.storage, oldAccount.storageSize * 64).hex() if oldAccount.storageSize > 0 else ''} to {ctypes.string_at(postAccount.storage, postAccount.storageSize * 64).hex() if postAccount.storageSize > 0 else ''}")
                 # code does not exist in the post state, so we don't override it
             else:
                 account = Account()
@@ -171,10 +173,6 @@ class CuEVMLib:
             storage_write = []
             bugs = []
 
-            # todo_cl fix this
-            print(ctypes.alignment(PostStates)) # => 8
-            print(ctypes.sizeof(PostStates))  # => 16
-
             log.debug("post_process_trace branchesSize %s eventsSize %s callsSize %s", tx_trace.branchesSize, tx_trace.eventsSize, tx_trace.callsSize)
 
 
@@ -187,7 +185,7 @@ class CuEVMLib:
                         pc_src=branch.pcSrc,
                         pc_dst=branch.pcDst,
                         pc_missed=branch.pcMissed,
-                        distance=branch.distance, # todo_cl may need to convert to number
+                        distance=int.from_bytes(bytes(branch.distance), 'big'), # convert to number
                     )
                 )
 
@@ -206,8 +204,8 @@ class CuEVMLib:
                         TraceEvent(
                             pc=event.pc,
                             opcode=event.op,
-                            operand_1=event.stack[0:32], # todo_cl convert to number
-                            operand_2=event.stack[32:64],
+                            operand_1=int.from_bytes(event.stack[0:32], 'big'), # todo convert to number
+                            operand_2=int.from_bytes(event.stack[32:64], 'big'),
                             result=event.res, # convert to number
                         )
                     )
@@ -233,7 +231,7 @@ class CuEVMLib:
                         opcode=call.op,
                         _from=call.sender,
                         _to=call.receiver,
-                        value=call.value, # todo_cl to number
+                        value=int.from_bytes(bytes(call.value), 'big'), # to number
                         result=call.success
                     )
                 )

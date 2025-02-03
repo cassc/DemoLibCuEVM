@@ -33,20 +33,20 @@ class PostAccount(ctypes.Structure):
         ("balance", ctypes.c_uint8 * 32),
         ("address", ctypes.c_uint8 * 32),
         ("nonce", ctypes.c_uint8 * 32),
+        ("storageSize", ctypes.c_uint32),  # number of 64-byte entries
         ("storage", ctypes.POINTER(ctypes.c_uint8)),  # pointer to uint8_t storage
-        ("storageSize", ctypes.c_uint32)  # number of 64-byte entries
     ]
-
 
 class Trace(ctypes.Structure):
     _fields_ = [
-        ("events", ctypes.POINTER(Event)),
         ("eventsSize", ctypes.c_uint32),
-        ("branches", ctypes.POINTER(Branch)),
         ("branchesSize", ctypes.c_uint32),
-        ("calls", ctypes.POINTER(Call)),
-        ("callsSize", ctypes.c_uint32)
+        ("callsSize", ctypes.c_uint32),
+        ("events", ctypes.POINTER(Event)),
+        ("branches", ctypes.POINTER(Branch)),
+        ("calls", ctypes.POINTER(Call))
     ]
+
 
 class PostState(ctypes.Structure):
     _fields_ = [
